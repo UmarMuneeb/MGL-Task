@@ -141,17 +141,24 @@ export const action = async ({ request }) => {
                     status: product.status,
                     vendor: product.vendor,
                     productType: product.productType,
-                    tags: product.tags,
+                    tags: product.tags || [],
                     seo: product.seo ? {
                         title: product.seo.title,
                         description: product.seo.description
                     } : undefined,
-                    metafields: product.metafields.edges.map(edge => ({
-                        namespace: edge.node.namespace,
-                        key: edge.node.key,
-                        value: edge.node.value,
-                        type: edge.node.type
-                    })),
+                    metafields: product.metafields.edges
+                        .map(edge => edge.node)
+                        .filter(meta => {
+                            // Filter out reference types that are store-specific and will cause errors
+                            const type = meta.type.toLowerCase();
+                            return !type.includes("reference") && !type.includes("metaobject") && !type.includes("file");
+                        })
+                        .map(meta => ({
+                            namespace: meta.namespace,
+                            key: meta.key,
+                            value: meta.value,
+                            type: meta.type
+                        })),
                     files: product.media.edges
                         .filter(edge => edge.node.image)
                         .map(edge => ({

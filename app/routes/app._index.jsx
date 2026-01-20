@@ -1,11 +1,22 @@
 import { useState, useEffect } from "react";
 import { data } from "react-router";
-import { authenticate } from "../shopify.server";
+import { authenticate, registerWebhooks } from "../shopify.server";
 
 // Loader function - runs on server
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  console.log("Runtime SCOPES:", process.env.SCOPES);
+  const { session } = await authenticate.admin(request);
+
+  // Force webhook registration whenever the dashboard is loaded
+  // This ensures that even if the tunnel URL changed, the store's webhooks point to the right place
+  console.log(`--- Registering webhooks for ${session.shop} ---`);
+  try {
+    await registerWebhooks({ session });
+    console.log(`Webhooks registered for ${session.shop}`);
+  } catch (e) {
+    console.error(`Webhook registration failed for ${session.shop}:`, e);
+  }
+
+  console.log(`Current App URL: ${process.env.SHOPIFY_APP_URL}`);
   return data({});
 };
 

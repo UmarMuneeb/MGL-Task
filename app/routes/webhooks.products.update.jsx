@@ -2,10 +2,10 @@ import { authenticate, unauthenticated } from "../shopify.server";
 import db from "../db.server";
 
 export const action = async ({ request }) => {
+    console.log("!!! Webhook Request Received !!!");
     try {
         const { topic, shop, payload, admin } = await authenticate.webhook(request);
-
-        console.log(`Webhook: Product ${payload.id} updated in ${shop}`);
+        console.log(`>>> Webhook Verified: Topic=${topic}, Shop=${shop}, ProductID=${payload.id}`);
 
         const productGid = `gid://shopify/Product/${payload.id}`;
 
@@ -46,19 +46,26 @@ export const action = async ({ request }) => {
         const sourceJson = await sourceResponse.json();
         const sourceProduct = sourceJson.data?.product;
 
-        // Find synced products
+        // Find synced products - Bidirectional search
         const syncRecords = await db.productSync.findMany({
             where: {
-                sourceStoreId: shop,
-                sourceProductId: productGid,
+                OR: [
+                    { sourceStoreId: shop, sourceProductId: productGid }, // Shop is Source
+                    { targetStoreId: shop, targetProductId: productGid }  // Shop is Target
+                ]
             },
         });
 
-        // Update each target store
+        // Update each connected store
         for (const sync of syncRecords) {
             try {
-                console.log(`Syncing update to ${sync.targetStoreId}...`);
-                const { admin: targetAdmin } = await unauthenticated.admin(sync.targetStoreId);
+                // Determine direction: sync away from the store that triggered the webhook
+                const isShopSource = sync.sourceStoreId === shop;
+                const targetStoreId = isShopSource ? sync.targetStoreId : sync.sourceStoreId;
+                const targetProductId = isShopSource ? sync.targetProductId : sync.sourceProductId;
+
+                console.log(`Syncing update from ${shop} to ${targetStoreId}...`);
+                const { admin: targetAdmin } = await unauthenticated.admin(targetStoreId);
 
                 // Fetch target store's primary location
                 const locationResponse = await targetAdmin.graphql(
@@ -83,7 +90,7 @@ export const action = async ({ request }) => {
 
                 // Map webhook payload + fetched data to productSet input
                 const productInput = {
-                    id: sync.targetProductId,
+                    id: targetProductId,
                     title: payload.title,
                     descriptionHtml: payload.body_html,
                     vendor: payload.vendor,
@@ -94,12 +101,19 @@ export const action = async ({ request }) => {
                         title: sourceProduct.seo.title,
                         description: sourceProduct.seo.description
                     } : undefined,
-                    metafields: sourceProduct?.metafields ? sourceProduct.metafields.edges.map(edge => ({
-                        namespace: edge.node.namespace,
-                        key: edge.node.key,
-                        value: edge.node.value,
-                        type: edge.node.type
-                    })) : [],
+                    metafields: sourceProduct?.metafields ? sourceProduct.metafields.edges
+                        .map(edge => edge.node)
+                        .filter(meta => {
+                            // Filter out reference types that are store-specific and will cause errors
+                            const type = meta.type.toLowerCase();
+                            return !type.includes("reference") && !type.includes("metaobject") && !type.includes("file");
+                        })
+                        .map(meta => ({
+                            namespace: meta.namespace,
+                            key: meta.key,
+                            value: meta.value,
+                            type: meta.type
+                        })) : [],
                     files: payload.images ? payload.images.map(img => ({
                         alt: img.alt,
                         contentType: "IMAGE",
