@@ -61,13 +61,43 @@ export default function Index() {
     );
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     if (selectedProducts.length === 0) {
       alert("Please select at least one product!");
       return;
     }
-    const storeLabel = stores.find(s => s.value === selectedStore)?.label || selectedStore;
-    alert(`Transferring ${selectedProducts.length} product(s) to ${storeLabel}`);
+
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("productIds", JSON.stringify(selectedProducts));
+      formData.append("targetStore", selectedStore);
+
+      const response = await fetch("/app/api/transfer", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      const successes = data.results.filter((r) => r.status === "success");
+      const errors = data.results.filter((r) => r.status === "error");
+
+      if (errors.length > 0) {
+        alert(
+          `Transfer complete!\nSuccess: ${successes.length}\nErrors: ${errors.length}\nCheck console for details.`
+        );
+        console.error("Transfer errors:", errors);
+      } else {
+        alert(`Successfully transferred ${successes.length} product(s)!`);
+      }
+      setSelectedProducts([]);
+    } catch (error) {
+      alert("Error transferring products: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
