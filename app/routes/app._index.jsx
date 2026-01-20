@@ -20,6 +20,13 @@ export default function Index() {
   useEffect(() => {
     fetchProducts();
     fetchStores();
+
+    // Auto-refresh every 30 seconds to catch new transfers or webhook updates
+    const interval = setInterval(() => {
+      fetchProducts();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchProducts = async () => {
@@ -97,6 +104,8 @@ export default function Index() {
         alert(`Successfully transferred ${successes.length} product(s)!`);
       }
       setSelectedProducts([]);
+      // Re-fetch products to show new sync status
+      await fetchProducts();
     } catch (error) {
       alert("Error transferring products: " + error.message);
     } finally {
@@ -152,6 +161,13 @@ export default function Index() {
               <button
                 className="button"
                 style={{ backgroundColor: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1" }}
+                onClick={() => fetchProducts()}
+              >
+                Refresh List
+              </button>
+              <button
+                className="button"
+                style={{ backgroundColor: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1" }}
                 onClick={handleTestWebhook}
               >
                 Test Webhook
@@ -185,6 +201,11 @@ export default function Index() {
                     <p>
                       Price: ${product.price} | Inventory: {product.inventory}
                     </p>
+                    {product.syncedTo && product.syncedTo.length > 0 && (
+                      <div className="sync-status" style={{ fontSize: "0.75rem", color: "var(--success-text)", marginTop: "4px" }}>
+                        ✓ Synced to: {product.syncedTo.join(", ")}
+                      </div>
+                    )}
                   </div>
                   <span className={`badge ${product.status === "ACTIVE" ? "badge-success" : ""}`} style={{
                     backgroundColor: product.status === "ACTIVE" ? "var(--success-bg)" : "#e2e8f0",
