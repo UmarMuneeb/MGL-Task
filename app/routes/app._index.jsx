@@ -1,61 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { data } from "react-router";
+import { authenticate } from "../shopify.server";
+
+// Loader function - runs on server
+export const loader = async ({ request }) => {
+  await authenticate.admin(request);
+  return data({});
+};
 
 export default function Index() {
-  // Dummy data for stores
-  const stores = [
-    { label: "Store A (Current)", value: "store-a" },
-    { label: "Store B", value: "store-b" },
-    { label: "Store C", value: "store-c" },
-  ];
-
-  // Dummy product data
-  const dummyProducts = [
-    {
-      id: "1",
-      title: "Cool T-Shirt",
-      price: "$29.99",
-      inventory: 50,
-      status: "Active",
-    },
-    {
-      id: "2",
-      title: "Awesome Mug",
-      price: "$14.99",
-      inventory: 100,
-      status: "Active",
-    },
-    {
-      id: "3",
-      title: "Fancy Hat",
-      price: "$24.99",
-      inventory: 25,
-      status: "Active",
-    },
-  ];
-
-  // State
-  const [selectedStore, setSelectedStore] = useState("store-b");
+  const [stores, setStores] = useState([]);
+  const [selectedStore, setSelectedStore] = useState("");
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [storesLoading, setStoresLoading] = useState(true);
 
-  // Handle store selection
+  // Fetch products and stores when component loads
+  useEffect(() => {
+    fetchProducts();
+    fetchStores();
+  }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/app/api/products");
+      const dataResponse = await response.json();
+      setProducts(dataResponse.products);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStores = async () => {
+    setStoresLoading(true);
+    try {
+      const response = await fetch("/app/api/stores");
+      const dataResponse = await response.json();
+      setStores(dataResponse.stores);
+      if (dataResponse.stores.length > 0) {
+        setSelectedStore(dataResponse.stores[0].value);
+      }
+    } catch (error) {
+      console.error("Error fetching stores:", error);
+    } finally {
+      setStoresLoading(false);
+    }
+  };
+
   const handleStoreChange = (e) => {
     setSelectedStore(e.target.value);
   };
 
-  // Handle product selection checkbox change
   const handleToggleProduct = (id) => {
     setSelectedProducts((prev) =>
       prev.includes(id) ? prev.filter((pId) => pId !== id) : [...prev, id]
     );
   };
 
-  // Handle transfer button click
   const handleTransfer = () => {
     if (selectedProducts.length === 0) {
       alert("Please select at least one product!");
       return;
     }
-    const storeLabel = stores.find(s => s.value === selectedStore)?.label;
+    const storeLabel = stores.find(s => s.value === selectedStore)?.label || selectedStore;
     alert(`Transferring ${selectedProducts.length} product(s) to ${storeLabel}`);
   };
 
@@ -73,18 +84,26 @@ export default function Index() {
             <label htmlFor="store-select" className="label">
               Target Store
             </label>
-            <select
-              id="store-select"
-              className="select"
-              value={selectedStore}
-              onChange={handleStoreChange}
-            >
-              {stores.map((store) => (
-                <option key={store.value} value={store.value}>
-                  {store.label}
-                </option>
-              ))}
-            </select>
+            {storesLoading ? (
+              <div style={{ fontSize: "0.875rem", color: "var(--text-sub)" }}>Loading stores...</div>
+            ) : stores.length > 0 ? (
+              <select
+                id="store-select"
+                className="select"
+                value={selectedStore}
+                onChange={handleStoreChange}
+              >
+                {stores.map((store) => (
+                  <option key={store.value} value={store.value}>
+                    {store.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ fontSize: "0.875rem", color: "var(--text-sub)", padding: "10px", border: "1px dashed var(--border)", borderRadius: "8px" }}>
+                No other stores found. Please install the app on another store to enable transfer.
+              </div>
+            )}
           </div>
           <p className="tag-sub">
             Products will be transferred to the selected store
@@ -98,31 +117,47 @@ export default function Index() {
             <button
               className="button button-primary"
               onClick={handleTransfer}
-              disabled={selectedProducts.length === 0}
+              disabled={selectedProducts.length === 0 || loading}
             >
               Transfer Selected ({selectedProducts.length})
             </button>
           </div>
 
-          <ul className="product-list">
-            {dummyProducts.map((product) => (
-              <li key={product.id} className="product-item">
-                <input
-                  type="checkbox"
-                  className="checkbox"
-                  checked={selectedProducts.includes(product.id)}
-                  onChange={() => handleToggleProduct(product.id)}
-                />
-                <div className="product-info">
-                  <h3>{product.title}</h3>
-                  <p>
-                    Price: {product.price} | Inventory: {product.inventory}
-                  </p>
-                </div>
-                <span className="badge badge-success">{product.status}</span>
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-sub)" }}>
+              Loading products...
+            </div>
+          ) : (
+            <ul className="product-list">
+              {products.map((product) => (
+                <li key={product.id} className="product-item">
+                  <input
+                    type="checkbox"
+                    className="checkbox"
+                    checked={selectedProducts.includes(product.id)}
+                    onChange={() => handleToggleProduct(product.id)}
+                  />
+                  <div className="product-info">
+                    <h3>{product.title}</h3>
+                    <p>
+                      Price: ${product.price} | Inventory: {product.inventory}
+                    </p>
+                  </div>
+                  <span className={`badge ${product.status === "ACTIVE" ? "badge-success" : ""}`} style={{
+                    backgroundColor: product.status === "ACTIVE" ? "var(--success-bg)" : "#e2e8f0",
+                    color: product.status === "ACTIVE" ? "var(--success-text)" : "#64748b"
+                  }}>
+                    {product.status}
+                  </span>
+                </li>
+              ))}
+              {products.length === 0 && (
+                <li className="product-item" style={{ justifyContent: "center", color: "var(--text-sub)" }}>
+                  No products found.
+                </li>
+              )}
+            </ul>
+          )}
         </section>
       </main>
     </div>

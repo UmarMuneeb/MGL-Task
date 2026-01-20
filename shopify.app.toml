@@ -2,12 +2,11 @@
 
 client_id = "15d289b6a0868199f00cba1dc4d558d2"
 name = "product-transfer-umar"
-application_url = "https://example.com"
+application_url = "https://roses-jane-dip-only.trycloudflare.com"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -25,4 +24,7 @@ api_version = "2026-04"
 scopes = "write_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://roses-jane-dip-only.trycloudflare.com/auth/callback",
+  "https://roses-jane-dip-only.trycloudflare.com/auth/shopify/callback"
+]
