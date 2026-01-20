@@ -32,3 +32,15 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model ProductSync {
+  id              String   @id @default(cuid())
+  sourceStoreId   String
+  targetStoreId   String
+  sourceProductId String
+  targetProductId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sourceStoreId, targetStoreId, sourceProductId])
+}
