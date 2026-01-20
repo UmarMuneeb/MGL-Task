@@ -7,16 +7,29 @@ export const action = async ({ request }) => {
 
     const formData = await request.formData();
     const productIds = JSON.parse(formData.get("productIds"));
-    const targetStore = formData.get("targetStore");
+    const rawTargetStore = formData.get("targetStore");
+    const targetStore = typeof rawTargetStore === "string" ? rawTargetStore.trim() : rawTargetStore;
+
+    console.log(`Transfer API received targetStore: "${targetStore}" (type: ${typeof targetStore})`);
 
     const results = [];
 
     try {
+        if (!targetStore || targetStore === "undefined" || targetStore === "null") {
+            throw new Error("No valid target store selected");
+        }
+
+        // Basic shop domain validation
+        if (!targetStore.includes(".myshopify.com")) {
+            throw new Error(`Invalid shop domain: ${targetStore}`);
+        }
+
+        // Ensure it's a valid shop domain if possible, or at least not empty
         const { admin: targetAdmin } = await unauthenticated.admin(targetStore);
 
         for (const productId of productIds) {
             try {
-                // 1. Fetch source product
+                // 1. Fetch source product with all details including inventory
                 const response = await admin.graphql(
                     `#graphql
                     query getProduct($id: ID!) {
@@ -27,6 +40,32 @@ export const action = async ({ request }) => {
                             vendor
                             productType
                             tags
+                            seo {
+                                title
+                                description
+                            }
+                            metafields(first: 50) {
+                                edges {
+                                    node {
+                                        namespace
+                                        key
+                                        value
+                                        type
+                                    }
+                                }
+                            }
+                            media(first: 20) {
+                                edges {
+                                    node {
+                                        ... on MediaImage {
+                                            image {
+                                                url
+                                                altText
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             options {
                                 name
                                 values
@@ -43,6 +82,16 @@ export const action = async ({ request }) => {
                                             value
                                         }
                                         inventoryItem {
+                                            inventoryLevels(first: 1) {
+                                                edges {
+                                                    node {
+                                                        quantities(names: ["available"]) {
+                                                            name
+                                                            quantity
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             measurement {
                                                 weight {
                                                     value
@@ -65,7 +114,27 @@ export const action = async ({ request }) => {
                     throw new Error(`Product not found in source store: ${productId}`);
                 }
 
-                // 2. Map to productSet input
+                // 2. Fetch target store's primary location
+                const locationResponse = await targetAdmin.graphql(
+                    `#graphql
+                    query {
+                        locations(first: 1, query: "is_primary:true") {
+                            edges {
+                                node {
+                                    id
+                                }
+                            }
+                        }
+                    }`
+                );
+                const locationData = await locationResponse.json();
+                const targetLocationId = locationData.data?.locations?.edges[0]?.node?.id;
+
+                if (!targetLocationId) {
+                    throw new Error(`Could not find a primary location in target store: ${targetStore}`);
+                }
+
+                // 3. Map to productSet input
                 const productInput = {
                     title: product.title,
                     descriptionHtml: product.descriptionHtml,
@@ -73,28 +142,59 @@ export const action = async ({ request }) => {
                     vendor: product.vendor,
                     productType: product.productType,
                     tags: product.tags,
+                    seo: product.seo ? {
+                        title: product.seo.title,
+                        description: product.seo.description
+                    } : undefined,
+                    metafields: product.metafields.edges.map(edge => ({
+                        namespace: edge.node.namespace,
+                        key: edge.node.key,
+                        value: edge.node.value,
+                        type: edge.node.type
+                    })),
+                    files: product.media.edges
+                        .filter(edge => edge.node.image)
+                        .map(edge => ({
+                            alt: edge.node.image.altText,
+                            contentType: "IMAGE",
+                            originalSource: edge.node.image.url
+                        })),
                     productOptions: product.options.map(opt => ({
                         name: opt.name,
                         values: opt.values.map(val => ({ name: val }))
                     })),
-                    variants: product.variants.edges.map(edge => ({
-                        price: edge.node.price,
-                        compareAtPrice: edge.node.compareAtPrice,
-                        sku: edge.node.sku,
-                        barcode: edge.node.barcode,
-                        optionValues: edge.node.selectedOptions.map(opt => ({
-                            optionName: opt.name,
-                            name: opt.value
-                        })),
-                        inventoryItem: edge.node.inventoryItem?.measurement?.weight ? {
-                            measurement: {
-                                weight: {
-                                    value: edge.node.inventoryItem.measurement.weight.value,
-                                    unit: edge.node.inventoryItem.measurement.weight.unit
+                    variants: product.variants.edges.map(edge => {
+                        const variant = {
+                            price: edge.node.price,
+                            compareAtPrice: edge.node.compareAtPrice,
+                            sku: edge.node.sku,
+                            barcode: edge.node.barcode,
+                            optionValues: edge.node.selectedOptions.map(opt => ({
+                                optionName: opt.name,
+                                name: opt.value
+                            })),
+                            inventoryItem: edge.node.inventoryItem?.measurement?.weight ? {
+                                measurement: {
+                                    weight: {
+                                        value: edge.node.inventoryItem.measurement.weight.value,
+                                        unit: edge.node.inventoryItem.measurement.weight.unit
+                                    }
                                 }
-                            }
-                        } : undefined
-                    }))
+                            } : undefined
+                        };
+
+                        // Add inventory quantity if available
+                        const availableQty = edge.node.inventoryItem?.inventoryLevels?.edges[0]?.node?.quantities?.find(q => q.name === "available")?.quantity;
+                        if (typeof availableQty === 'number') {
+                            variant.inventoryQuantities = [{
+                                locationId: targetLocationId,
+                                name: "available",
+                                quantity: availableQty
+                            }];
+                        }
+
+                        return variant;
+                    })
                 };
 
                 // 3. Sync to target

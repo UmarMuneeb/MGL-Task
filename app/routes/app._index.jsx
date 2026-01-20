@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 // Loader function - runs on server
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
+  console.log("Runtime SCOPES:", process.env.SCOPES);
   return data({});
 };
 
@@ -75,6 +76,11 @@ export default function Index() {
   const handleTransfer = async () => {
     if (selectedProducts.length === 0) {
       alert("Please select at least one product!");
+      return;
+    }
+
+    if (!selectedStore) {
+      alert("Please select a target store!");
       return;
     }
 
@@ -175,7 +181,7 @@ export default function Index() {
               <button
                 className="button button-primary"
                 onClick={handleTransfer}
-                disabled={selectedProducts.length === 0 || loading}
+                disabled={selectedProducts.length === 0 || loading || !selectedStore}
               >
                 Transfer Selected ({selectedProducts.length})
               </button>
