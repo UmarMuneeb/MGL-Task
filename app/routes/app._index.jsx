@@ -61,6 +61,10 @@ export default function Index() {
     );
   };
 
+  const handleTestWebhook = () => {
+    alert("To test the webhook: Go to Shopify Admin, edit any product title or price, and save. Then check your terminal logs!");
+  };
+
   const handleTransfer = async () => {
     if (selectedProducts.length === 0) {
       alert("Please select at least one product!");
@@ -144,13 +148,22 @@ export default function Index() {
         <section className="card">
           <div className="flex-between">
             <h2 className="card-title">Available Products</h2>
-            <button
-              className="button button-primary"
-              onClick={handleTransfer}
-              disabled={selectedProducts.length === 0 || loading}
-            >
-              Transfer Selected ({selectedProducts.length})
-            </button>
+            <div className="flex-group" style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="button"
+                style={{ backgroundColor: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1" }}
+                onClick={handleTestWebhook}
+              >
+                Test Webhook
+              </button>
+              <button
+                className="button button-primary"
+                onClick={handleTransfer}
+                disabled={selectedProducts.length === 0 || loading}
+              >
+                Transfer Selected ({selectedProducts.length})
+              </button>
+            </div>
           </div>
 
           {loading ? (

@@ -2,7 +2,7 @@
 
 client_id = "15d289b6a0868199f00cba1dc4d558d2"
 name = "product-transfer-umar"
-application_url = "https://roses-jane-dip-only.trycloudflare.com"
+application_url = "https://vpn-spears-mental-bag.trycloudflare.com"
 embedded = true
 
 [build]
@@ -13,18 +13,23 @@ api_version = "2026-04"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
+  uri = "https://roses-jane-dip-only.trycloudflare.com/webhooks/app/uninstalled"
 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  [[webhooks.subscriptions]]
+  topics = ["products/update"]
+  uri = "/webhooks/products/update"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://roses-jane-dip-only.trycloudflare.com/auth/callback",
-  "https://roses-jane-dip-only.trycloudflare.com/auth/shopify/callback"
+  "https://evaluations-knights-parliament-mighty.trycloudflare.com"
 ]
